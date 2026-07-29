@@ -1,0 +1,253 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Ambuja Cement Foundation — Custom Styles
+   Bootstrap 5 overrides and application-specific CSS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── CSS Variables (ACF Brand) ──────────────────────────────────────────── */
+
+:root {
+  --acf-primary: #1a5276;
+  --acf-primary-light: #2471a3;
+  --acf-primary-dark: #113755;
+  --acf-accent: #28a745;
+  --acf-sidebar-width: 250px;
+  --acf-navbar-height: 56px;
+  --acf-body-bg: #f4f6f9;
+  --acf-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+/* ── Global ─────────────────────────────────────────────────────────────── */
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  background-color: var(--acf-body-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Navbar ──────────────────────────────────────────────────────────────── */
+
+.acf-navbar {
+  background: linear-gradient(135deg, var(--acf-primary) 0%, var(--acf-primary-dark) 100%);
+  min-height: var(--acf-navbar-height);
+  z-index: 1030;
+}
+
+.acf-navbar .navbar-brand {
+  font-size: 1.1rem;
+  letter-spacing: 0.3px;
+}
+
+.acf-navbar .dropdown-toggle::after {
+  margin-left: 0.35rem;
+}
+
+/* ── Sidebar ────────────────────────────────────────────────────────────── */
+
+.acf-sidebar {
+  width: var(--acf-sidebar-width);
+  min-height: calc(100vh - var(--acf-navbar-height));
+  background: #ffffff;
+  border-right: 1px solid #e9ecef;
+  position: sticky;
+  top: var(--acf-navbar-height);
+  height: calc(100vh - var(--acf-navbar-height));
+  overflow-y: auto;
+  transition: transform 0.25s ease-in-out;
+  flex-shrink: 0;
+}
+
+.acf-sidebar .nav-link {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #495057;
+  transition: all 0.15s ease;
+}
+
+.acf-sidebar .nav-link:hover {
+  background-color: #f0f4f8;
+  color: var(--acf-primary);
+}
+
+.acf-sidebar .acf-nav-active {
+  background-color: var(--acf-primary) !important;
+  color: #ffffff !important;
+}
+
+.acf-sidebar .acf-nav-active:hover {
+  background-color: var(--acf-primary-light) !important;
+  color: #ffffff !important;
+}
+
+/* Mobile sidebar */
+@media (max-width: 991.98px) {
+  .acf-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    z-index: 1040;
+    transform: translateX(-100%);
+    border-right: none;
+    box-shadow: 4px 0 12px rgba(0, 0, 0, 0.15);
+  }
+
+  .acf-sidebar.show {
+    transform: translateX(0);
+  }
+}
+
+/* ── Main Content ───────────────────────────────────────────────────────── */
+
+.acf-main {
+  min-width: 0; /* prevent flex overflow */
+  background-color: var(--acf-body-bg);
+}
+
+/* ── Footer ─────────────────────────────────────────────────────────────── */
+
+.acf-footer {
+  background-color: #ffffff;
+}
+
+/* ── Login Page ─────────────────────────────────────────────────────────── */
+
+.acf-login-page {
+  min-height: 100vh;
+  background: linear-gradient(135deg, var(--acf-primary) 0%, var(--acf-primary-dark) 60%, #0d2137 100%);
+  padding: 1rem;
+}
+
+.acf-login-card {
+  border-radius: 12px;
+  animation: fadeInUp 0.5s ease-out;
+}
+
+.acf-login-icon {
+  width: 64px;
+  height: 64px;
+  background: linear-gradient(135deg, var(--acf-primary) 0%, var(--acf-primary-light) 100%);
+  color: #ffffff;
+}
+
+/* ── Stat Cards ─────────────────────────────────────────────────────────── */
+
+.acf-stat-card {
+  border-radius: 10px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.acf-stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.acf-stat-icon {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+}
+
+/* ── Cards (general) ────────────────────────────────────────────────────── */
+
+.card {
+  border-radius: 10px;
+}
+
+.card-header {
+  border-radius: 10px 10px 0 0 !important;
+}
+
+/* ── Forms ───────────────────────────────────────────────────────────────── */
+
+.form-control:focus,
+.form-select:focus {
+  border-color: var(--acf-primary-light);
+  box-shadow: 0 0 0 0.2rem rgba(26, 82, 118, 0.15);
+}
+
+.form-label {
+  font-size: 0.9rem;
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────────── */
+
+.btn-primary {
+  background-color: var(--acf-primary);
+  border-color: var(--acf-primary);
+}
+
+.btn-primary:hover {
+  background-color: var(--acf-primary-light);
+  border-color: var(--acf-primary-light);
+}
+
+.btn-outline-primary {
+  color: var(--acf-primary);
+  border-color: var(--acf-primary);
+}
+
+.btn-outline-primary:hover {
+  background-color: var(--acf-primary);
+  border-color: var(--acf-primary);
+  color: #ffffff;
+}
+
+/* ── Dropdown ───────────────────────────────────────────────────────────── */
+
+.dropdown-menu {
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+}
+
+.dropdown-item:active {
+  background-color: var(--acf-primary);
+}
+
+/* ── Animations ─────────────────────────────────────────────────────────── */
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Scrollbar (Webkit) ─────────────────────────────────────────────────── */
+
+.acf-sidebar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.acf-sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.acf-sidebar::-webkit-scrollbar-thumb {
+  background: #ced4da;
+  border-radius: 4px;
+}
+
+/* ── Badge tweaks ───────────────────────────────────────────────────────── */
+
+.badge {
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+/* ── Alert tweaks ───────────────────────────────────────────────────────── */
+
+.alert {
+  border-radius: 8px;
+}
+
+/* ── Table responsive ───────────────────────────────────────────────────── */
+
+.table > :not(caption) > * > * {
+  padding: 0.75rem;
+}
