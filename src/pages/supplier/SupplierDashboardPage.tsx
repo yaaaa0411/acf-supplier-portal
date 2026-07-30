@@ -4,6 +4,8 @@ import { useAuth } from '../../hooks/useAuth';
 import { Loader } from '../../components/common/Loader';
 import { fetchSupplierRecords } from '../../services/data.service';
 import type { SupplierRecord } from '../../types';
+import { formatMoney } from '../../utils/costCalculations';
+import { getFinancialYearLabel } from '../../utils/workOrder';
 
 /**
  * Supplier Dashboard — lists submitted records and allows new entries.
@@ -118,8 +120,10 @@ export function SupplierDashboardPage() {
                   <tr>
                     <th className="ps-3">#</th>
                     <th>Work Order</th>
-                    <th>MIS Supplier Name</th>
-                    <th>Year</th>
+                    <th>Farmer Name</th>
+                    <th>Area (Ha)</th>
+                    <th>Total Cost</th>
+                    <th>FY</th>
                     <th>Date Applied</th>
                     <th>Status</th>
                     <th className="text-end pe-3">Actions</th>
@@ -133,7 +137,9 @@ export function SupplierDashboardPage() {
                         <span className="fw-medium">{record.work_order_number}</span>
                       </td>
                       <td>{record.mis_supplier_name}</td>
-                      <td>{record.year}</td>
+                      <td>{record.area_ha?.toFixed(2) ?? '—'}</td>
+                      <td>₹{formatMoney(record.total_cost)}</td>
+                      <td><small>{getFinancialYearLabel(record.year)}</small></td>
                       <td>
                         <small>{new Date(record.date_of_application).toLocaleDateString('en-IN')}</small>
                       </td>

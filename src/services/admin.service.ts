@@ -54,13 +54,17 @@ export async function fetchAllRecords(
   page: number,
   pageSize: number,
   filters: RecordFilters
-): Promise<PaginatedResult<SupplierRecord & { districts: { name: string } | null }>> {
+): Promise<PaginatedResult<SupplierRecord & {
+  districts: { name: string } | null;
+  blocks: { name: string } | null;
+  villages: { name: string } | null;
+}>> {
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 
   let query = supabase
     .from('supplier_records')
-    .select('*, districts ( name )', { count: 'exact' });
+    .select('*, districts ( name ), blocks ( name ), villages ( name )', { count: 'exact' });
 
   // Filters
   if (filters.status) {
@@ -88,7 +92,11 @@ export async function fetchAllRecords(
   }
 
   return {
-    data: (data ?? []) as (SupplierRecord & { districts: { name: string } | null })[],
+    data: (data ?? []) as (SupplierRecord & {
+      districts: { name: string } | null;
+      blocks: { name: string } | null;
+      villages: { name: string } | null;
+    })[],
     count: count ?? 0,
   };
 }

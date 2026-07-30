@@ -79,6 +79,17 @@ export interface SupplierRecord {
   year: string;
   mis_supplier_name: string;
   date_of_application: string;
+  area_ha: number | null;
+  type_of_mis: string | null;
+  crop: string | null;
+  farmer_mobile_no: string | null;
+  total_mis_cost_ggrc: number | null;
+  farmers_contribution: number | null;
+  acf_contribution: number | null;
+  company_share: number | null;
+  government_contribution: number | null;
+  total_cost: number | null;
+  receipt_number: string | null;
   status: RecordStatus;
   approved_by: string | null;
   approved_at: string | null;
@@ -156,4 +167,13 @@ export const WORK_ORDER_PREFIXES: { value: WorkOrderPrefix; label: string }[] = 
   { value: 'AML', label: 'AML' },
   { value: 'CTU', label: 'CTU' },
   { value: 'JND', label: 'JND' },
+];
+
+export const MIS_TYPE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'Drip Irrigation System', label: 'Drip Irrigation System' },
+  { value: 'Sprinkler Irrigation System', label: 'Sprinkler Irrigation System' },
+  { value: 'Mulching', label: 'Mulching' },
+  { value: 'Polyhouse / Shade Net', label: 'Polyhouse / Shade Net' },
+  { value: 'Farm Pond / Water Harvesting', label: 'Farm Pond / Water Harvesting' },
+  { value: 'Other', label: 'Other' },
 ];

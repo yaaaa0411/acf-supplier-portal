@@ -166,6 +166,23 @@ export async function createSupplierRecord(
 }
 
 /**
+ * Generate the next work order number for a given prefix.
+ * Format: {FY}-{PREFIX}-{SEQ4} e.g. 2526-GS-2704
+ */
+export async function generateWorkOrderNumber(prefix: string): Promise<string> {
+  const { data, error } = await supabase.rpc('generate_work_order_number', {
+    p_prefix: prefix,
+  });
+
+  if (error) {
+    console.error('Generate work order number error:', error.message);
+    throw error;
+  }
+
+  return data as string;
+}
+
+/**
  * Update an existing supplier record (admin only, enforced by RLS).
  */
 export async function updateSupplierRecord(

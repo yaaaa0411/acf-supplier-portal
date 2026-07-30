@@ -3,28 +3,26 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { Loader } from '../../components/common/Loader';
 import {
+  CostFields,
+  costValuesFromRecord,
+  getCalculatedCostValues,
+  type CostFieldValues,
+} from '../../components/supplier/CostFields';
+import {
   fetchDistricts,
   fetchBlocksByDistrict,
   fetchVillagesByBlock,
   fetchSupplierRecordById,
   createSupplierRecord,
+  generateWorkOrderNumber,
   fetchRemarksByRecord,
   createRemark,
 } from '../../services/data.service';
 import type { District, Block, Village, SupplierRecord, Remark, WorkOrderPrefix } from '../../types';
-import { WORK_ORDER_PREFIXES } from '../../types';
-
-/**
- * Generate year options from 2020 to current year + 1.
- */
-function getYearOptions(): string[] {
-  const currentYear = new Date().getFullYear();
-  const years: string[] = [];
-  for (let y = currentYear + 1; y >= 2020; y--) {
-    years.push(String(y));
-  }
-  return years;
-}
+import { WORK_ORDER_PREFIXES, MIS_TYPE_OPTIONS } from '../../types';
+import { getFinancialYearCode } from '../../utils/workOrder';
+import { extractReceiptNumber } from '../../utils/workOrder';
+import { RecordDetailsPanel } from '../../components/supplier/RecordDetailsPanel';
 
 /**
  * Supplier Entry Form.
@@ -39,55 +37,55 @@ export function SupplierEntryPage() {
   const navigate = useNavigate();
   const recordId = searchParams.get('id');
 
-  // Existing record (null = not yet submitted)
   const [existingRecord, setExistingRecord] = useState<SupplierRecord | null>(null);
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
 
-  // Form fields
   const [workOrderPrefix, setWorkOrderPrefix] = useState<WorkOrderPrefix>('GS');
-  const [workOrderNumber, setWorkOrderNumber] = useState('');
+  const [generatedWorkOrder, setGeneratedWorkOrder] = useState('');
   const [districtId, setDistrictId] = useState('');
   const [blockId, setBlockId] = useState('');
   const [villageId, setVillageId] = useState('');
-  const [year, setYear] = useState(String(new Date().getFullYear()));
   const [misSupplierName, setMisSupplierName] = useState('');
   const [dateOfApplication, setDateOfApplication] = useState('');
+  const [areaHa, setAreaHa] = useState('');
+  const [typeOfMis, setTypeOfMis] = useState('');
+  const [typeOfMisOther, setTypeOfMisOther] = useState('');
+  const [crop, setCrop] = useState('');
+  const [farmerMobileNo, setFarmerMobileNo] = useState('');
+  const [costValues, setCostValues] = useState<CostFieldValues>({
+    totalMisCostGgrc: '',
+    acfContribution: '',
+    companyShare: '',
+    governmentContribution: '',
+  });
   const [formRemarks, setFormRemarks] = useState('');
 
-  // Dropdown data
   const [districts, setDistricts] = useState<District[]>([]);
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [villages, setVillages] = useState<Village[]>([]);
 
-  // Remarks
   const [remarks, setRemarks] = useState<Remark[]>([]);
   const [newRemark, setNewRemark] = useState('');
   const [remarkSubmitting, setRemarkSubmitting] = useState(false);
 
-  // Form state
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const yearOptions = getYearOptions();
-
-  // ── Load initial data ─────────────────────────────────────────────────────
+  const financialYear = getFinancialYearCode();
 
   const loadInitialData = useCallback(async () => {
     if (!profile) return;
     try {
       setPageLoading(true);
 
-      // Load districts
       const districtData = await fetchDistricts();
       setDistricts(districtData);
 
-      // If record ID is provided, load that specific record
       if (recordId) {
         const record = await fetchSupplierRecordById(recordId);
         if (record) {
-          // Double check access: record supplier must be the logged-in user
           if (record.supplier_id !== profile.id) {
             navigate('/unauthorized');
             return;
@@ -95,56 +93,63 @@ export function SupplierEntryPage() {
 
           setExistingRecord(record);
           setHasSubmitted(true);
-
-          // Pre-fill form with existing data (parse combined work_order_number)
-          const prefixes: WorkOrderPrefix[] = ['GS', 'AML', 'CTU', 'JND'];
-          let detectedPrefix: WorkOrderPrefix = 'GS';
-          let detectedNumber = record.work_order_number;
-
-          for (const p of prefixes) {
-            if (record.work_order_number.startsWith(p)) {
-              detectedPrefix = p;
-              detectedNumber = record.work_order_number.substring(p.length);
-              break;
-            }
-          }
-
-          setWorkOrderPrefix(detectedPrefix);
-          setWorkOrderNumber(detectedNumber);
+          setGeneratedWorkOrder(record.work_order_number);
+          setWorkOrderPrefix(
+            (record.work_order_number.match(/-(GS|AML|CTU|JND)-/)?.[1] as WorkOrderPrefix) ?? 'GS'
+          );
           setDistrictId(record.district_id);
-          setYear(record.year);
           setMisSupplierName(record.mis_supplier_name);
           setDateOfApplication(record.date_of_application);
+          setAreaHa(record.area_ha?.toString() ?? '');
+          setCrop(record.crop ?? '');
+          setFarmerMobileNo(record.farmer_mobile_no ?? '');
 
-          // Load blocks for the existing district
+          const misType = record.type_of_mis ?? '';
+          const knownMis = MIS_TYPE_OPTIONS.find((o) => o.value === misType && o.value !== 'Other');
+          if (knownMis) {
+            setTypeOfMis(misType);
+            setTypeOfMisOther('');
+          } else if (misType) {
+            setTypeOfMis('Other');
+            setTypeOfMisOther(misType);
+          }
+
+          setCostValues(costValuesFromRecord(record));
+
           const blockData = await fetchBlocksByDistrict(record.district_id);
           setBlocks(blockData);
           setBlockId(record.block_id);
 
-          // Load villages for the existing block
           const villageData = await fetchVillagesByBlock(record.block_id);
           setVillages(villageData);
           setVillageId(record.village_id);
 
-          // Load remarks
           const remarkData = await fetchRemarksByRecord(record.id);
           setRemarks(remarkData);
         } else {
-          // Record not found
           navigate('/supplier/dashboard');
         }
       } else {
-        // New record form, reset state
         setExistingRecord(null);
         setHasSubmitted(false);
         setWorkOrderPrefix('GS');
-        setWorkOrderNumber('');
+        setGeneratedWorkOrder('');
         setDistrictId('');
         setBlockId('');
         setVillageId('');
-        setYear(String(new Date().getFullYear()));
         setMisSupplierName(profile.full_name || '');
         setDateOfApplication(new Date().toISOString().substring(0, 10));
+        setAreaHa('');
+        setTypeOfMis('');
+        setTypeOfMisOther('');
+        setCrop('');
+        setFarmerMobileNo('');
+        setCostValues({
+          totalMisCostGgrc: '',
+          acfContribution: '',
+          companyShare: '',
+          governmentContribution: '',
+        });
         setFormRemarks('');
       }
     } catch (err) {
@@ -158,8 +163,6 @@ export function SupplierEntryPage() {
   useEffect(() => {
     loadInitialData();
   }, [loadInitialData]);
-
-  // ── Cascading dropdowns ───────────────────────────────────────────────────
 
   const handleDistrictChange = async (newDistrictId: string) => {
     setDistrictId(newDistrictId);
@@ -193,41 +196,60 @@ export function SupplierEntryPage() {
     }
   };
 
-  // ── Form submission ───────────────────────────────────────────────────────
+  const resolvedMisType = typeOfMis === 'Other' ? typeOfMisOther.trim() : typeOfMis;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!profile || hasSubmitted) return;
 
-    // Validate
-    if (!workOrderNumber.trim()) { setError('Work Order Number is required.'); return; }
-    if (!/^\d+$/.test(workOrderNumber.trim())) {
-      setError('Unique Number must contain only digits.');
-      return;
-    }
     if (!districtId) { setError('Please select a District.'); return; }
     if (!blockId) { setError('Please select a Block.'); return; }
     if (!villageId) { setError('Please select a Village.'); return; }
-    if (!year) { setError('Please select a Year.'); return; }
     if (!misSupplierName.trim()) { setError('MIS Supplier Name is required.'); return; }
     if (!dateOfApplication) { setError('Date of Application is required.'); return; }
+    if (!areaHa || parseFloat(areaHa) <= 0) { setError('Area (Ha) is required and must be greater than 0.'); return; }
+    if (!resolvedMisType) { setError('Type of MIS is required.'); return; }
+    if (!crop.trim()) { setError('Crop is required.'); return; }
+    if (!/^\d{10}$/.test(farmerMobileNo.trim())) {
+      setError('Farmer Mobile No. must be exactly 10 digits.');
+      return;
+    }
+
+    const costs = getCalculatedCostValues(costValues);
+    if (costs.total_mis_cost_ggrc <= 0) {
+      setError('Total MIS Cost by GGRC is required.');
+      return;
+    }
 
     setError(null);
     setSubmitting(true);
 
     try {
+      const workOrderNumber = await generateWorkOrderNumber(workOrderPrefix);
+      const receiptNumber = extractReceiptNumber(workOrderNumber);
+
       const record = await createSupplierRecord({
         supplier_id: profile.id,
-        work_order_number: workOrderPrefix + workOrderNumber.trim(),
+        work_order_number: workOrderNumber,
         district_id: districtId,
         block_id: blockId,
         village_id: villageId,
-        year,
+        year: financialYear,
         mis_supplier_name: misSupplierName.trim(),
         date_of_application: dateOfApplication,
+        area_ha: parseFloat(areaHa),
+        type_of_mis: resolvedMisType,
+        crop: crop.trim(),
+        farmer_mobile_no: farmerMobileNo.trim(),
+        total_mis_cost_ggrc: costs.total_mis_cost_ggrc,
+        farmers_contribution: costs.farmers_contribution,
+        acf_contribution: costs.acf_contribution,
+        company_share: costs.company_share,
+        government_contribution: costs.government_contribution,
+        total_cost: costs.total_cost,
+        receipt_number: receiptNumber,
       });
 
-      // If remarks were included with submission, create them
       if (formRemarks.trim()) {
         await createRemark(record.id, profile.id, formRemarks.trim());
         const remarkData = await fetchRemarksByRecord(record.id);
@@ -235,17 +257,17 @@ export function SupplierEntryPage() {
       }
 
       setExistingRecord(record);
+      setGeneratedWorkOrder(workOrderNumber);
       setHasSubmitted(true);
-      setSuccess('Your entry has been submitted successfully!');
-      
-      // Auto-redirect to dashboard after a short delay
+      setSuccess(`Your entry has been submitted successfully! Work Order: ${workOrderNumber}`);
+
       setTimeout(() => {
         navigate('/supplier/dashboard');
-      }, 1500);
+      }, 2000);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Submission failed. Please try again.';
-      if (message.includes('supplier_records_work_order_number_key') || message.includes('work_order_number') || message.toLowerCase().includes('duplicate key value violates unique constraint')) {
-        setError('This Work Order Number already exists. Please enter a different unique number.');
+      if (message.includes('work_order_number') || message.toLowerCase().includes('duplicate')) {
+        setError('Work order generation failed due to a duplicate. Please try again.');
       } else {
         setError(message);
       }
@@ -253,8 +275,6 @@ export function SupplierEntryPage() {
       setSubmitting(false);
     }
   };
-
-  // ── Add remark (post-submission) ──────────────────────────────────────────
 
   const handleAddRemark = async () => {
     if (!profile || !existingRecord || !newRemark.trim()) return;
@@ -272,13 +292,9 @@ export function SupplierEntryPage() {
     }
   };
 
-  // ── Loading state ─────────────────────────────────────────────────────────
-
   if (pageLoading) {
     return <Loader message="Loading entry form…" fullPage={false} />;
   }
-
-  // ── Render ────────────────────────────────────────────────────────────────
 
   const isReadOnly = hasSubmitted;
 
@@ -306,7 +322,6 @@ export function SupplierEntryPage() {
         </button>
       </div>
 
-      {/* Alerts */}
       {error && (
         <div className="alert alert-danger alert-dismissible fade show" role="alert">
           <i className="bi bi-exclamation-triangle-fill me-2"></i>
@@ -322,7 +337,6 @@ export function SupplierEntryPage() {
         </div>
       )}
 
-      {/* Submission status badge */}
       {hasSubmitted && existingRecord && (
         <div className="mb-4">
           <span className={`badge fs-6 ${
@@ -340,7 +354,6 @@ export function SupplierEntryPage() {
         </div>
       )}
 
-      {/* Entry Form */}
       <div className="card border-0 shadow-sm mb-4">
         <div className="card-header bg-white border-bottom">
           <h5 className="mb-0 fw-bold">Entry Details</h5>
@@ -350,155 +363,210 @@ export function SupplierEntryPage() {
             {/* Work Order Number */}
             <div className="mb-3">
               <label className="form-label fw-medium">
-                Work Order Number <span className="text-danger">*</span>
+                Work Order Prefix <span className="text-danger">*</span>
               </label>
-              <div className="row g-2">
-                <div className="col-auto" style={{ minWidth: '120px' }}>
+              {isReadOnly ? (
+                <input
+                  type="text"
+                  className="form-control bg-light"
+                  value={generatedWorkOrder || existingRecord?.work_order_number || ''}
+                  readOnly
+                />
+              ) : (
+                <>
                   <select
                     className="form-select"
                     value={workOrderPrefix}
                     onChange={(e) => setWorkOrderPrefix(e.target.value as WorkOrderPrefix)}
-                    disabled={isReadOnly}
                     id="work-order-prefix"
                   >
                     {WORK_ORDER_PREFIXES.map((p) => (
                       <option key={p.value} value={p.value}>{p.label}</option>
                     ))}
                   </select>
-                </div>
-                <div className="col">
+                  <div className="form-text">
+                    Work Order Number will be auto-generated on submit (e.g. {financialYear}-{workOrderPrefix}-0001)
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="row">
+              <div className="col-md-6 mb-3">
+                <label htmlFor="district-select" className="form-label fw-medium">
+                  District <span className="text-danger">*</span>
+                </label>
+                <select
+                  className="form-select"
+                  id="district-select"
+                  value={districtId}
+                  onChange={(e) => handleDistrictChange(e.target.value)}
+                  disabled={isReadOnly}
+                >
+                  <option value="">— Select District —</option>
+                  {districts.map((d) => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="col-md-6 mb-3">
+                <label htmlFor="block-select" className="form-label fw-medium">
+                  Taluka <span className="text-danger">*</span>
+                </label>
+                <select
+                  className="form-select"
+                  id="block-select"
+                  value={blockId}
+                  onChange={(e) => handleBlockChange(e.target.value)}
+                  disabled={isReadOnly || !districtId}
+                >
+                  <option value="">— Select Taluka —</option>
+                  {blocks.map((b) => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="row">
+              <div className="col-md-6 mb-3">
+                <label htmlFor="village-select" className="form-label fw-medium">
+                  Village <span className="text-danger">*</span>
+                </label>
+                <select
+                  className="form-select"
+                  id="village-select"
+                  value={villageId}
+                  onChange={(e) => setVillageId(e.target.value)}
+                  disabled={isReadOnly || !blockId}
+                >
+                  <option value="">— Select Village —</option>
+                  {villages.map((v) => (
+                    <option key={v.id} value={v.id}>{v.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="col-md-6 mb-3">
+                <label htmlFor="mis-supplier-name" className="form-label fw-medium">
+                  Farmer / MIS Supplier Name <span className="text-danger">*</span>
+                </label>
+                <input
+                  type="text"
+                  className="form-control"
+                  id="mis-supplier-name"
+                  placeholder="Enter farmer name"
+                  value={misSupplierName}
+                  onChange={(e) => setMisSupplierName(e.target.value)}
+                  disabled={isReadOnly}
+                />
+              </div>
+            </div>
+
+            <div className="row">
+              <div className="col-md-4 mb-3">
+                <label htmlFor="area-ha" className="form-label fw-medium">
+                  Area (Ha) <span className="text-danger">*</span>
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  className="form-control"
+                  id="area-ha"
+                  placeholder="0.00"
+                  value={areaHa}
+                  onChange={(e) => setAreaHa(e.target.value)}
+                  disabled={isReadOnly}
+                />
+              </div>
+
+              <div className="col-md-4 mb-3">
+                <label htmlFor="type-of-mis" className="form-label fw-medium">
+                  Type of MIS <span className="text-danger">*</span>
+                </label>
+                <select
+                  className="form-select"
+                  id="type-of-mis"
+                  value={typeOfMis}
+                  onChange={(e) => setTypeOfMis(e.target.value)}
+                  disabled={isReadOnly}
+                >
+                  <option value="">— Select Type —</option>
+                  {MIS_TYPE_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+                {typeOfMis === 'Other' && (
                   <input
                     type="text"
-                    className="form-control"
-                    placeholder="Enter unique number"
-                    value={workOrderNumber}
-                    onChange={(e) => setWorkOrderNumber(e.target.value)}
+                    className="form-control mt-2"
+                    placeholder="Specify type of MIS"
+                    value={typeOfMisOther}
+                    onChange={(e) => setTypeOfMisOther(e.target.value)}
                     disabled={isReadOnly}
-                    id="work-order-number"
                   />
-                </div>
+                )}
               </div>
-              {(workOrderPrefix || workOrderNumber) && (
-                <div className="form-text">
-                  Work Order: <strong>{workOrderPrefix}{workOrderNumber || '___'}</strong>
-                </div>
-              )}
+
+              <div className="col-md-4 mb-3">
+                <label htmlFor="crop" className="form-label fw-medium">
+                  Crop <span className="text-danger">*</span>
+                </label>
+                <input
+                  type="text"
+                  className="form-control"
+                  id="crop"
+                  placeholder="Enter crop name"
+                  value={crop}
+                  onChange={(e) => setCrop(e.target.value)}
+                  disabled={isReadOnly}
+                />
+              </div>
             </div>
 
-            {/* District */}
-            <div className="mb-3">
-              <label htmlFor="district-select" className="form-label fw-medium">
-                District <span className="text-danger">*</span>
-              </label>
-              <select
-                className="form-select"
-                id="district-select"
-                value={districtId}
-                onChange={(e) => handleDistrictChange(e.target.value)}
-                disabled={isReadOnly}
-              >
-                <option value="">— Select District —</option>
-                {districts.map((d) => (
-                  <option key={d.id} value={d.id}>{d.name}</option>
-                ))}
-              </select>
+            <div className="row">
+              <div className="col-md-6 mb-3">
+                <label htmlFor="farmer-mobile" className="form-label fw-medium">
+                  Farmer Mobile No. <span className="text-danger">*</span>
+                </label>
+                <input
+                  type="tel"
+                  className="form-control"
+                  id="farmer-mobile"
+                  placeholder="10-digit mobile number"
+                  maxLength={10}
+                  value={farmerMobileNo}
+                  onChange={(e) => setFarmerMobileNo(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  disabled={isReadOnly}
+                />
+              </div>
+
+              <div className="col-md-6 mb-3">
+                <label htmlFor="date-of-application" className="form-label fw-medium">
+                  Date of Application <span className="text-danger">*</span>
+                </label>
+                <input
+                  type="date"
+                  className="form-control"
+                  id="date-of-application"
+                  value={dateOfApplication}
+                  onChange={(e) => setDateOfApplication(e.target.value)}
+                  disabled={isReadOnly}
+                />
+              </div>
             </div>
 
-            {/* Taluka */}
-            <div className="mb-3">
-              <label htmlFor="block-select" className="form-label fw-medium">
-                Taluka <span className="text-danger">*</span>
-              </label>
-              <select
-                className="form-select"
-                id="block-select"
-                value={blockId}
-                onChange={(e) => handleBlockChange(e.target.value)}
-                disabled={isReadOnly || !districtId}
-              >
-                <option value="">— Select Taluka —</option>
-                {blocks.map((b) => (
-                  <option key={b.id} value={b.id}>{b.name}</option>
-                ))}
-              </select>
-              {!districtId && (
-                <div className="form-text">Select a district first.</div>
-              )}
-            </div>
+            <hr className="my-4" />
+            <h6 className="fw-bold mb-3">Cost Contribution Details</h6>
 
-            {/* Village */}
-            <div className="mb-3">
-              <label htmlFor="village-select" className="form-label fw-medium">
-                Village <span className="text-danger">*</span>
-              </label>
-              <select
-                className="form-select"
-                id="village-select"
-                value={villageId}
-                onChange={(e) => setVillageId(e.target.value)}
-                disabled={isReadOnly || !blockId}
-              >
-                <option value="">— Select Village —</option>
-                {villages.map((v) => (
-                  <option key={v.id} value={v.id}>{v.name}</option>
-                ))}
-              </select>
-              {!blockId && (
-                <div className="form-text">Select a taluka first.</div>
-              )}
-            </div>
+            <CostFields
+              values={costValues}
+              onChange={setCostValues}
+              disabled={isReadOnly}
+            />
 
-            {/* Year */}
-            <div className="mb-3">
-              <label htmlFor="year-select" className="form-label fw-medium">
-                Year <span className="text-danger">*</span>
-              </label>
-              <select
-                className="form-select"
-                id="year-select"
-                value={year}
-                onChange={(e) => setYear(e.target.value)}
-                disabled={isReadOnly}
-              >
-                <option value="">— Select Year —</option>
-                {yearOptions.map((y) => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* MIS Supplier Name */}
-            <div className="mb-3">
-              <label htmlFor="mis-supplier-name" className="form-label fw-medium">
-                MIS Supplier Name <span className="text-danger">*</span>
-              </label>
-              <input
-                type="text"
-                className="form-control"
-                id="mis-supplier-name"
-                placeholder="Enter MIS Supplier Name"
-                value={misSupplierName}
-                onChange={(e) => setMisSupplierName(e.target.value)}
-                disabled={isReadOnly}
-              />
-            </div>
-
-            {/* Date of Application */}
-            <div className="mb-3">
-              <label htmlFor="date-of-application" className="form-label fw-medium">
-                Date of Application <span className="text-danger">*</span>
-              </label>
-              <input
-                type="date"
-                className="form-control"
-                id="date-of-application"
-                value={dateOfApplication}
-                onChange={(e) => setDateOfApplication(e.target.value)}
-                disabled={isReadOnly}
-              />
-            </div>
-
-            {/* Remarks (with initial submission only) */}
             {!hasSubmitted && (
               <div className="mb-4">
                 <label htmlFor="form-remarks" className="form-label fw-medium">
@@ -515,7 +583,6 @@ export function SupplierEntryPage() {
               </div>
             )}
 
-            {/* Submit Button */}
             {!hasSubmitted && (
               <div className="d-grid d-md-block">
                 <button
@@ -542,61 +609,76 @@ export function SupplierEntryPage() {
         </div>
       </div>
 
-      {/* Remarks Section (always visible after submission) */}
       {hasSubmitted && existingRecord && (
-        <div className="card border-0 shadow-sm">
-          <div className="card-header bg-white border-bottom d-flex justify-content-between align-items-center">
-            <h5 className="mb-0 fw-bold">
-              <i className="bi bi-chat-left-text me-2"></i>
-              Remarks
-            </h5>
-            <span className="badge bg-secondary">{remarks.length}</span>
-          </div>
-          <div className="card-body p-4">
-            {/* Add new remark */}
-            <div className="mb-4">
-              <div className="input-group">
-                <textarea
-                  className="form-control"
-                  placeholder="Add a remark…"
-                  value={newRemark}
-                  onChange={(e) => setNewRemark(e.target.value)}
-                  rows={2}
-                  id="new-remark-input"
-                ></textarea>
-                <button
-                  className="btn btn-primary"
-                  type="button"
-                  onClick={handleAddRemark}
-                  disabled={remarkSubmitting || !newRemark.trim()}
-                  id="add-remark-btn"
-                >
-                  {remarkSubmitting ? (
-                    <span className="spinner-border spinner-border-sm"></span>
-                  ) : (
-                    <i className="bi bi-send"></i>
-                  )}
-                </button>
-              </div>
+        <>
+          <div className="card border-0 shadow-sm mb-4">
+            <div className="card-header bg-white border-bottom">
+              <h5 className="mb-0 fw-bold">Record Summary</h5>
             </div>
-
-            {/* Remarks list */}
-            {remarks.length === 0 ? (
-              <p className="text-muted text-center mb-0">No remarks yet.</p>
-            ) : (
-              <div className="list-group list-group-flush">
-                {remarks.map((remark) => (
-                  <div key={remark.id} className="list-group-item px-0 border-start-0 border-end-0">
-                    <p className="mb-1">{remark.content}</p>
-                    <small className="text-muted">
-                      {new Date(remark.created_at).toLocaleString('en-IN')}
-                    </small>
-                  </div>
-                ))}
-              </div>
-            )}
+            <div className="card-body">
+              <RecordDetailsPanel
+                record={existingRecord}
+                geography={{
+                  district: districts.find((d) => d.id === existingRecord.district_id)?.name,
+                  block: blocks.find((b) => b.id === existingRecord.block_id)?.name,
+                  village: villages.find((v) => v.id === existingRecord.village_id)?.name,
+                }}
+              />
+            </div>
           </div>
-        </div>
+
+          <div className="card border-0 shadow-sm">
+            <div className="card-header bg-white border-bottom d-flex justify-content-between align-items-center">
+              <h5 className="mb-0 fw-bold">
+                <i className="bi bi-chat-left-text me-2"></i>
+                Remarks
+              </h5>
+              <span className="badge bg-secondary">{remarks.length}</span>
+            </div>
+            <div className="card-body p-4">
+              <div className="mb-4">
+                <div className="input-group">
+                  <textarea
+                    className="form-control"
+                    placeholder="Add a remark…"
+                    value={newRemark}
+                    onChange={(e) => setNewRemark(e.target.value)}
+                    rows={2}
+                    id="new-remark-input"
+                  ></textarea>
+                  <button
+                    className="btn btn-primary"
+                    type="button"
+                    onClick={handleAddRemark}
+                    disabled={remarkSubmitting || !newRemark.trim()}
+                    id="add-remark-btn"
+                  >
+                    {remarkSubmitting ? (
+                      <span className="spinner-border spinner-border-sm"></span>
+                    ) : (
+                      <i className="bi bi-send"></i>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {remarks.length === 0 ? (
+                <p className="text-muted text-center mb-0">No remarks yet.</p>
+              ) : (
+                <div className="list-group list-group-flush">
+                  {remarks.map((remark) => (
+                    <div key={remark.id} className="list-group-item px-0 border-start-0 border-end-0">
+                      <p className="mb-1">{remark.content}</p>
+                      <small className="text-muted">
+                        {new Date(remark.created_at).toLocaleString('en-IN')}
+                      </small>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

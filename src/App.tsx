@@ -14,6 +14,7 @@ import { SubadminDashboardPage } from './pages/subadmin/SubadminDashboardPage';
 import { SubadminRecordsPage } from './pages/subadmin/SubadminRecordsPage';
 import { SupplierDashboardPage } from './pages/supplier/SupplierDashboardPage';
 import { SupplierEntryPage } from './pages/supplier/SupplierEntryPage';
+import { ReportsPage } from './pages/reports/ReportsPage';
 import { UnauthorizedPage } from './pages/UnauthorizedPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 
@@ -44,7 +45,7 @@ function App() {
               <Route path="/admin/users" element={<AdminUsersPage />} />
               <Route path="/admin/records" element={<AdminRecordsPage />} />
               <Route path="/admin/geography" element={<ComingSoonPage title="Geography Management" />} />
-              <Route path="/admin/reports" element={<ComingSoonPage title="System Reports" />} />
+              <Route path="/admin/reports" element={<ReportsPage />} />
             </Route>
 
             {/* ── Subadmin routes ────────────────────────────────── */}
@@ -57,7 +58,7 @@ function App() {
             >
               <Route path="/subadmin/dashboard" element={<SubadminDashboardPage />} />
               <Route path="/subadmin/records" element={<SubadminRecordsPage />} />
-              <Route path="/subadmin/reports" element={<ComingSoonPage title="Subadmin Reports" />} />
+              <Route path="/subadmin/reports" element={<ReportsPage districtScope={undefined} />} />
             </Route>
 
             {/* ── Supplier routes ────────────────────────────────── */}

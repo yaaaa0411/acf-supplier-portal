@@ -12,8 +12,16 @@ import {
   updateSupplierRecord,
   deleteSupplierRecord,
 } from '../../services/data.service';
-import type { SupplierRecord, District, WorkOrderPrefix } from '../../types';
-import { WORK_ORDER_PREFIXES } from '../../types';
+import {
+  CostFields,
+  costValuesFromRecord,
+  getCalculatedCostValues,
+  type CostFieldValues,
+} from '../../components/supplier/CostFields';
+import { RecordDetailsPanel } from '../../components/supplier/RecordDetailsPanel';
+import type { SupplierRecord, District } from '../../types';
+import { MIS_TYPE_OPTIONS } from '../../types';
+import { parseWorkOrderNumber, getFinancialYearLabel, getFinancialYearCode } from '../../utils/workOrder';
 
 const PAGE_SIZE = 10;
 const STATUS_OPTIONS = [
@@ -23,7 +31,26 @@ const STATUS_OPTIONS = [
   { value: 'rejected', label: 'Rejected' },
 ];
 
-type RecordWithDistrict = SupplierRecord & { districts: { name: string } | null };
+type RecordWithDistrict = SupplierRecord & {
+  districts: { name: string } | null;
+  blocks?: { name: string } | null;
+  villages?: { name: string } | null;
+};
+
+const WORK_ORDER_FORMAT = /^\d{4}-(GS|AML|CTU|JND)-\d+$/;
+
+function getFinancialYearOptions(): { value: string; label: string }[] {
+  const options: { value: string; label: string }[] = [];
+  const now = new Date();
+  for (let offset = -3; offset <= 2; offset++) {
+    const d = new Date(now.getFullYear() + offset, 3, 1);
+    const code = getFinancialYearCode(d);
+    if (!options.some((o) => o.value === code)) {
+      options.push({ value: code, label: getFinancialYearLabel(code) });
+    }
+  }
+  return options.sort((a, b) => b.value.localeCompare(a.value));
+}
 
 /**
  * Admin Records Page.
@@ -48,15 +75,29 @@ export function AdminRecordsPage() {
   const [yearFilter, setYearFilter] = useState('');
   const searchTimeout = useRef<ReturnType<typeof setTimeout>>(null);
 
+  // View modal
+  const [viewRecord, setViewRecord] = useState<RecordWithDistrict | null>(null);
+  const viewModalRef = useRef<HTMLDivElement>(null);
+  const bsViewModalRef = useRef<InstanceType<typeof import('bootstrap').Modal> | null>(null);
+
   // Edit modal
   const [editRecord, setEditRecord] = useState<RecordWithDistrict | null>(null);
   const [editData, setEditData] = useState({
-    work_order_prefix: '' as WorkOrderPrefix,
     work_order_number: '',
     mis_supplier_name: '',
     date_of_application: '',
-    year: '',
+    area_ha: '',
+    type_of_mis: '',
+    type_of_mis_other: '',
+    crop: '',
+    farmer_mobile_no: '',
     status: '' as SupplierRecord['status'],
+  });
+  const [editCostValues, setEditCostValues] = useState<CostFieldValues>({
+    totalMisCostGgrc: '',
+    acfContribution: '',
+    companyShare: '',
+    governmentContribution: '',
   });
   const [editSaving, setEditSaving] = useState(false);
   const editModalRef = useRef<HTMLDivElement>(null);
@@ -164,29 +205,32 @@ export function AdminRecordsPage() {
 
   // ── Edit ───────────────────────────────────────────────────────────────────
 
-  const openEdit = async (record: RecordWithDistrict) => {
-    // Parse combined work_order_number
-    const prefixes: WorkOrderPrefix[] = ['GS', 'AML', 'CTU', 'JND'];
-    let detectedPrefix: WorkOrderPrefix = 'GS';
-    let detectedNumber = record.work_order_number;
-
-    for (const p of prefixes) {
-      if (record.work_order_number.startsWith(p)) {
-        detectedPrefix = p;
-        detectedNumber = record.work_order_number.substring(p.length);
-        break;
-      }
+  const openView = async (record: RecordWithDistrict) => {
+    setViewRecord(record);
+    if (viewModalRef.current && !bsViewModalRef.current) {
+      const bootstrap = await import('bootstrap');
+      bsViewModalRef.current = new bootstrap.Modal(viewModalRef.current);
     }
+    bsViewModalRef.current?.show();
+  };
+
+  const openEdit = async (record: RecordWithDistrict) => {
+    const misType = record.type_of_mis ?? '';
+    const knownMis = MIS_TYPE_OPTIONS.find((o) => o.value === misType && o.value !== 'Other');
 
     setEditRecord(record);
     setEditData({
-      work_order_prefix: detectedPrefix,
-      work_order_number: detectedNumber,
+      work_order_number: record.work_order_number,
       mis_supplier_name: record.mis_supplier_name,
       date_of_application: record.date_of_application,
-      year: record.year,
+      area_ha: record.area_ha?.toString() ?? '',
+      type_of_mis: knownMis ? misType : misType ? 'Other' : '',
+      type_of_mis_other: knownMis ? '' : misType,
+      crop: record.crop ?? '',
+      farmer_mobile_no: record.farmer_mobile_no ?? '',
       status: record.status,
     });
+    setEditCostValues(costValuesFromRecord(record));
 
     if (editModalRef.current && !bsEditModalRef.current) {
       const bootstrap = await import('bootstrap');
@@ -197,21 +241,52 @@ export function AdminRecordsPage() {
 
   const handleEditSave = async () => {
     if (!editRecord) return;
-    if (!editData.work_order_number.trim()) {
+    const woNumber = editData.work_order_number.trim();
+    if (!woNumber) {
       setAlert({ type: 'danger', msg: 'Work Order Number is required.' });
       return;
     }
-    if (!/^\d+$/.test(editData.work_order_number.trim())) {
-      setAlert({ type: 'danger', msg: 'Unique Number must contain only digits.' });
+    if (!WORK_ORDER_FORMAT.test(woNumber)) {
+      setAlert({ type: 'danger', msg: 'Work Order Number must be in format 2526-GS-2704.' });
       return;
     }
+    if (!editData.area_ha || parseFloat(editData.area_ha) <= 0) {
+      setAlert({ type: 'danger', msg: 'Area (Ha) is required.' });
+      return;
+    }
+    const resolvedMisType = editData.type_of_mis === 'Other'
+      ? editData.type_of_mis_other.trim()
+      : editData.type_of_mis;
+    if (!resolvedMisType) {
+      setAlert({ type: 'danger', msg: 'Type of MIS is required.' });
+      return;
+    }
+    if (!/^\d{10}$/.test(editData.farmer_mobile_no.trim())) {
+      setAlert({ type: 'danger', msg: 'Farmer Mobile No. must be exactly 10 digits.' });
+      return;
+    }
+
+    const costs = getCalculatedCostValues(editCostValues);
+    const parsedWo = parseWorkOrderNumber(woNumber);
+
     setEditSaving(true);
     try {
       const updates: Partial<SupplierRecord> = {
-        work_order_number: editData.work_order_prefix + editData.work_order_number.trim(),
-        mis_supplier_name: editData.mis_supplier_name,
+        work_order_number: woNumber,
+        year: parsedWo?.financialYear ?? editRecord.year,
+        mis_supplier_name: editData.mis_supplier_name.trim(),
         date_of_application: editData.date_of_application,
-        year: editData.year,
+        area_ha: parseFloat(editData.area_ha),
+        type_of_mis: resolvedMisType,
+        crop: editData.crop.trim(),
+        farmer_mobile_no: editData.farmer_mobile_no.trim(),
+        total_mis_cost_ggrc: costs.total_mis_cost_ggrc,
+        farmers_contribution: costs.farmers_contribution,
+        acf_contribution: costs.acf_contribution,
+        company_share: costs.company_share,
+        government_contribution: costs.government_contribution,
+        total_cost: costs.total_cost,
+        receipt_number: parsedWo?.sequence.padStart(4, '0') ?? editRecord.receipt_number,
         status: editData.status,
       };
 
@@ -275,9 +350,7 @@ export function AdminRecordsPage() {
     }
   };
 
-  const currentYear = new Date().getFullYear();
-  const yearOptions: string[] = [];
-  for (let y = currentYear + 1; y >= 2020; y--) yearOptions.push(String(y));
+  const yearOptions = getFinancialYearOptions();
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -358,16 +431,16 @@ export function AdminRecordsPage() {
 
             {/* Year filter */}
             <div className="col-6 col-md-2 col-lg-2">
-              <label className="form-label small fw-medium mb-1">Year</label>
+              <label className="form-label small fw-medium mb-1">Financial Year</label>
               <select
                 className="form-select form-select-sm"
                 value={yearFilter}
                 onChange={(e) => handleYearChange(e.target.value)}
                 id="filter-year"
               >
-                <option value="">All Years</option>
+                <option value="">All Financial Years</option>
                 {yearOptions.map((y) => (
-                  <option key={y} value={y}>{y}</option>
+                  <option key={y.value} value={y.value}>{y.label}</option>
                 ))}
               </select>
             </div>
@@ -405,7 +478,9 @@ export function AdminRecordsPage() {
                     <th>Work Order</th>
                     <th>MIS Supplier Name</th>
                     <th>District</th>
-                    <th>Year</th>
+                    <th>Area (Ha)</th>
+                    <th>Total Cost</th>
+                    <th>FY</th>
                     <th>Date</th>
                     <th>Status</th>
                     <th className="text-end pe-3">Actions</th>
@@ -426,7 +501,9 @@ export function AdminRecordsPage() {
                       <td>
                         <small>{record.districts?.name ?? '—'}</small>
                       </td>
-                      <td>{record.year}</td>
+                      <td>{record.area_ha?.toFixed(2) ?? '—'}</td>
+                      <td><small>₹{record.total_cost?.toLocaleString('en-IN', { minimumFractionDigits: 2 }) ?? '—'}</small></td>
+                      <td><small>{getFinancialYearLabel(record.year)}</small></td>
                       <td>
                         <small>
                           {new Date(record.date_of_application).toLocaleDateString('en-IN')}
@@ -470,6 +547,14 @@ export function AdminRecordsPage() {
                             </>
                           )}
                           <button
+                            className="btn btn-sm btn-outline-secondary"
+                            title="View Details"
+                            onClick={() => openView(record)}
+                            type="button"
+                          >
+                            <i className="bi bi-eye"></i>
+                          </button>
+                          <button
                             className="btn btn-sm btn-outline-primary"
                             title="Edit"
                             onClick={() => openEdit(record)}
@@ -511,9 +596,35 @@ export function AdminRecordsPage() {
         )}
       </div>
 
+      {/* ── View Modal ──────────────────────────────────────────────────────── */}
+      <div className="modal fade" ref={viewModalRef} id="viewRecordModal" tabIndex={-1}>
+        <div className="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+          <div className="modal-content border-0 shadow">
+            <div className="modal-header border-bottom">
+              <h5 className="modal-title fw-bold">
+                <i className="bi bi-eye me-2"></i>Supplier Record Details
+              </h5>
+              <button type="button" className="btn-close" onClick={() => bsViewModalRef.current?.hide()}></button>
+            </div>
+            <div className="modal-body p-4">
+              {viewRecord && (
+                <RecordDetailsPanel
+                  record={viewRecord}
+                  geography={{
+                    district: viewRecord.districts?.name,
+                    block: viewRecord.blocks?.name,
+                    village: viewRecord.villages?.name,
+                  }}
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* ── Edit Modal ──────────────────────────────────────────────────────── */}
       <div className="modal fade" ref={editModalRef} id="editRecordModal" tabIndex={-1}>
-        <div className="modal-dialog modal-lg modal-dialog-centered">
+        <div className="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
           <div className="modal-content border-0 shadow">
             <div className="modal-header border-bottom">
               <h5 className="modal-title fw-bold">
@@ -528,32 +639,20 @@ export function AdminRecordsPage() {
             <div className="modal-body p-4">
               {editRecord && (
                 <div className="row g-3">
-                  {/* Work Order */}
-                  <div className="col-4">
-                    <label className="form-label fw-medium small">Prefix</label>
-                    <select
-                      className="form-select"
-                      value={editData.work_order_prefix}
-                      onChange={(e) => setEditData({ ...editData, work_order_prefix: e.target.value as WorkOrderPrefix })}
-                    >
-                      {WORK_ORDER_PREFIXES.map((p) => (
-                        <option key={p.value} value={p.value}>{p.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="col-8">
+                  <div className="col-12">
                     <label className="form-label fw-medium small">Work Order Number</label>
                     <input
                       type="text"
                       className="form-control"
+                      placeholder="2526-GS-2704"
                       value={editData.work_order_number}
                       onChange={(e) => setEditData({ ...editData, work_order_number: e.target.value })}
                     />
+                    <div className="form-text">Format: FY-PREFIX-SEQ (e.g. 2526-GS-2704). Financial year is derived from this.</div>
                   </div>
 
-                  {/* MIS Supplier Name */}
                   <div className="col-12">
-                    <label className="form-label fw-medium small">MIS Supplier Name</label>
+                    <label className="form-label fw-medium small">Farmer / MIS Supplier Name</label>
                     <input
                       type="text"
                       className="form-control"
@@ -562,22 +661,63 @@ export function AdminRecordsPage() {
                     />
                   </div>
 
-                  {/* Year */}
-                  <div className="col-6">
-                    <label className="form-label fw-medium small">Year</label>
-                    <select
-                      className="form-select"
-                      value={editData.year}
-                      onChange={(e) => setEditData({ ...editData, year: e.target.value })}
-                    >
-                      {yearOptions.map((y) => (
-                        <option key={y} value={y}>{y}</option>
-                      ))}
-                    </select>
+                  <div className="col-md-4">
+                    <label className="form-label fw-medium small">Area (Ha)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      className="form-control"
+                      value={editData.area_ha}
+                      onChange={(e) => setEditData({ ...editData, area_ha: e.target.value })}
+                    />
                   </div>
 
-                  {/* Date */}
-                  <div className="col-6">
+                  <div className="col-md-4">
+                    <label className="form-label fw-medium small">Type of MIS</label>
+                    <select
+                      className="form-select"
+                      value={editData.type_of_mis}
+                      onChange={(e) => setEditData({ ...editData, type_of_mis: e.target.value })}
+                    >
+                      <option value="">— Select —</option>
+                      {MIS_TYPE_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                    {editData.type_of_mis === 'Other' && (
+                      <input
+                        type="text"
+                        className="form-control mt-2"
+                        placeholder="Specify type"
+                        value={editData.type_of_mis_other}
+                        onChange={(e) => setEditData({ ...editData, type_of_mis_other: e.target.value })}
+                      />
+                    )}
+                  </div>
+
+                  <div className="col-md-4">
+                    <label className="form-label fw-medium small">Crop</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      value={editData.crop}
+                      onChange={(e) => setEditData({ ...editData, crop: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="col-md-6">
+                    <label className="form-label fw-medium small">Farmer Mobile No.</label>
+                    <input
+                      type="tel"
+                      className="form-control"
+                      maxLength={10}
+                      value={editData.farmer_mobile_no}
+                      onChange={(e) => setEditData({ ...editData, farmer_mobile_no: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                    />
+                  </div>
+
+                  <div className="col-md-6">
                     <label className="form-label fw-medium small">Date of Application</label>
                     <input
                       type="date"
@@ -587,7 +727,16 @@ export function AdminRecordsPage() {
                     />
                   </div>
 
-                  {/* Status */}
+                  <div className="col-12">
+                    <hr className="my-1" />
+                    <h6 className="fw-bold small">Cost Contribution Details</h6>
+                    <CostFields
+                      values={editCostValues}
+                      onChange={setEditCostValues}
+                      idPrefix="edit-"
+                    />
+                  </div>
+
                   <div className="col-12">
                     <label className="form-label fw-medium small">Status</label>
                     <select

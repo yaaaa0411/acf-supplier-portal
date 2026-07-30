@@ -11,7 +11,10 @@ import {
   updateSupplierRecord,
   type SubadminRecordFilters,
 } from '../../services/data.service';
+import { RecordDetailsPanel } from '../../components/supplier/RecordDetailsPanel';
 import type { SupplierRecord, Block, Village, Remark } from '../../types';
+import { getFinancialYearLabel, getFinancialYearCode } from '../../utils/workOrder';
+import { formatMoney } from '../../utils/costCalculations';
 
 const PAGE_SIZE = 10;
 const STATUS_OPTIONS = [
@@ -46,11 +49,18 @@ export function SubadminRecordsPage() {
   // Dropdown options
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [villages, setVillages] = useState<Village[]>([]);
-  const yearOptions: string[] = [];
-  const currentYear = new Date().getFullYear();
-  for (let y = currentYear + 1; y >= 2020; y--) {
-    yearOptions.push(String(y));
-  }
+  const yearOptions = (() => {
+    const options: { value: string; label: string }[] = [];
+    const now = new Date();
+    for (let offset = -3; offset <= 2; offset++) {
+      const d = new Date(now.getFullYear() + offset, 3, 1);
+      const code = getFinancialYearCode(d);
+      if (!options.some((o) => o.value === code)) {
+        options.push({ value: code, label: getFinancialYearLabel(code) });
+      }
+    }
+    return options.sort((a, b) => b.value.localeCompare(a.value));
+  })();
 
   // Filters state
   const [search, setSearch] = useState('');
@@ -348,16 +358,16 @@ export function SubadminRecordsPage() {
 
             {/* Year filter */}
             <div className="col-6 col-md-2">
-              <label className="form-label small fw-medium mb-1">Year</label>
+              <label className="form-label small fw-medium mb-1">Financial Year</label>
               <select
                 className="form-select form-select-sm"
                 value={yearFilter}
                 onChange={(e) => handleYearChange(e.target.value)}
                 id="filter-year-records"
               >
-                <option value="">All Years</option>
+                <option value="">All Financial Years</option>
                 {yearOptions.map((y) => (
-                  <option key={y} value={y}>{y}</option>
+                  <option key={y.value} value={y.value}>{y.label}</option>
                 ))}
               </select>
             </div>
@@ -396,7 +406,9 @@ export function SubadminRecordsPage() {
                     <th>MIS Supplier Name</th>
                     <th>Taluka</th>
                     <th>Village</th>
-                    <th>Year</th>
+                    <th>Area (Ha)</th>
+                    <th>Total Cost</th>
+                    <th>FY</th>
                     <th>Date</th>
                     <th>Status</th>
                     <th className="text-end pe-3">Actions</th>
@@ -414,7 +426,9 @@ export function SubadminRecordsPage() {
                       <td>{record.mis_supplier_name}</td>
                       <td>{record.blocks?.name ?? '—'}</td>
                       <td>{record.villages?.name ?? '—'}</td>
-                      <td>{record.year}</td>
+                      <td>{record.area_ha?.toFixed(2) ?? '—'}</td>
+                      <td><small>₹{formatMoney(record.total_cost)}</small></td>
+                      <td><small>{getFinancialYearLabel(record.year)}</small></td>
                       <td>
                         <small>
                           {new Date(record.date_of_application).toLocaleDateString('en-IN')}
@@ -510,6 +524,19 @@ export function SubadminRecordsPage() {
               ></button>
             </div>
             <div className="modal-body p-4">
+              {activeRecord && (
+                <div className="mb-4 pb-3 border-bottom">
+                  <RecordDetailsPanel
+                    record={activeRecord}
+                    geography={{
+                      block: activeRecord.blocks?.name,
+                      village: activeRecord.villages?.name,
+                    }}
+                    compact
+                  />
+                </div>
+              )}
+
               {/* Add New Remark */}
               <div className="mb-4">
                 <label htmlFor="modal-remark-input" className="form-label fw-semibold small text-dark">
