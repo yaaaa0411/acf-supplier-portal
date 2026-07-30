@@ -16,8 +16,28 @@ export type ReportRecord = SupplierRecord & {
   districts: { name: string } | null;
   blocks: { name: string } | null;
   villages: { name: string } | null;
-  user_profiles: { full_name: string; email: string } | null;
 };
+
+/**
+ * Apply report filters to a Supabase query builder.
+ */
+function applyReportFilters<T extends { eq: Function; ilike: Function; gte: Function; lte: Function; in: Function; order: Function }>(
+  query: T,
+  filters: ReportFilters,
+  districtScope?: string
+): T {
+  let q = query;
+  if (districtScope) q = q.eq('district_id', districtScope) as T;
+  if (filters.districtId) q = q.eq('district_id', filters.districtId) as T;
+  if (filters.blockId) q = q.eq('block_id', filters.blockId) as T;
+  if (filters.villageId) q = q.eq('village_id', filters.villageId) as T;
+  if (filters.workOrderNumber) q = q.ilike('work_order_number', `%${filters.workOrderNumber}%`) as T;
+  if (filters.dateFrom) q = q.gte('date_of_application', filters.dateFrom) as T;
+  if (filters.dateTo) q = q.lte('date_of_application', filters.dateTo) as T;
+  if (filters.supplierId) q = q.eq('supplier_id', filters.supplierId) as T;
+  if (filters.recordIds && filters.recordIds.length > 0) q = q.in('id', filters.recordIds) as T;
+  return q.order('created_at', { ascending: false }) as T;
+}
 
 /**
  * Fetch supplier records for report generation with optional filters.
@@ -27,55 +47,46 @@ export async function fetchRecordsForReports(
   filters: ReportFilters,
   options?: { districtScope?: string }
 ): Promise<ReportRecord[]> {
-  let query = supabase
-    .from('supplier_records')
-    .select(`
-      *,
-      districts ( name ),
-      blocks ( name ),
-      villages ( name ),
-      user_profiles ( full_name, email )
-    `);
+  const joinedQuery = applyReportFilters(
+    supabase
+      .from('supplier_records')
+      .select(`
+        *,
+        districts ( name ),
+        blocks ( name ),
+        villages ( name )
+      `),
+    filters,
+    options?.districtScope
+  );
 
-  if (options?.districtScope) {
-    query = query.eq('district_id', options.districtScope);
-  }
+  const { data, error } = await joinedQuery;
 
-  if (filters.districtId) {
-    query = query.eq('district_id', filters.districtId);
-  }
-  if (filters.blockId) {
-    query = query.eq('block_id', filters.blockId);
-  }
-  if (filters.villageId) {
-    query = query.eq('village_id', filters.villageId);
-  }
-  if (filters.workOrderNumber) {
-    query = query.ilike('work_order_number', `%${filters.workOrderNumber}%`);
-  }
-  if (filters.dateFrom) {
-    query = query.gte('date_of_application', filters.dateFrom);
-  }
-  if (filters.dateTo) {
-    query = query.lte('date_of_application', filters.dateTo);
-  }
-  if (filters.supplierId) {
-    query = query.eq('supplier_id', filters.supplierId);
-  }
-  if (filters.recordIds && filters.recordIds.length > 0) {
-    query = query.in('id', filters.recordIds);
+  if (!error) {
+    return (data ?? []) as ReportRecord[];
   }
 
-  query = query.order('created_at', { ascending: false });
+  console.warn('Report fetch with geography joins failed, retrying plain select:', error.message);
 
-  const { data, error } = await query;
+  const plainQuery = applyReportFilters(
+    supabase.from('supplier_records').select('*'),
+    filters,
+    options?.districtScope
+  );
 
-  if (error) {
-    console.error('Fetch records for reports error:', error.message);
-    throw error;
+  const { data: plainData, error: plainError } = await plainQuery;
+
+  if (plainError) {
+    console.error('Fetch records for reports error:', plainError.message);
+    throw plainError;
   }
 
-  return (data ?? []) as ReportRecord[];
+  return (plainData ?? []).map((record) => ({
+    ...(record as SupplierRecord),
+    districts: null,
+    blocks: null,
+    villages: null,
+  }));
 }
 
 export interface SupplierOption {
@@ -88,15 +99,25 @@ export interface SupplierOption {
  * Fetch supplier users for report filter dropdown.
  */
 export async function fetchSupplierOptions(districtId?: string): Promise<SupplierOption[]> {
+  const { data: supplierRole, error: roleError } = await supabase
+    .from('roles')
+    .select('id')
+    .eq('name', 'supplier')
+    .single();
+
+  if (roleError || !supplierRole) {
+    console.error('Fetch supplier role error:', roleError?.message);
+    return [];
+  }
+
   let query = supabase
     .from('user_profiles')
-    .select('id, full_name, email, roles!inner ( name )')
-    .eq('roles.name', 'supplier')
+    .select('id, full_name, email')
+    .eq('role_id', supplierRole.id)
     .eq('is_active', true)
     .order('full_name');
 
   if (districtId) {
-    // Suppliers don't have district_id; filter via their records instead
     const { data: recordSuppliers } = await supabase
       .from('supplier_records')
       .select('supplier_id')
@@ -111,7 +132,7 @@ export async function fetchSupplierOptions(districtId?: string): Promise<Supplie
 
   if (error) {
     console.error('Fetch supplier options error:', error.message);
-    throw error;
+    return [];
   }
 
   return (data ?? []) as SupplierOption[];

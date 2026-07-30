@@ -28,7 +28,7 @@ interface ReportsPageProps {
  * Used by both admin (all districts) and subadmin (district-scoped).
  */
 export function ReportsPage({ districtScope }: ReportsPageProps) {
-  const { hasPermission, profile } = useAuth();
+  const { hasPermission, profile, loading: authLoading } = useAuth();
   const canGenerate = hasPermission('view_reports');
 
   const effectiveDistrictScope =
@@ -68,7 +68,10 @@ export function ReportsPage({ districtScope }: ReportsPageProps) {
   }, [districtFilter, blockFilter, villageFilter, workOrderFilter, dateFrom, dateTo, supplierFilter]);
 
   const loadRecords = useCallback(async () => {
+    if (authLoading) return;
+
     setLoading(true);
+    setAlert(null);
     try {
       const data = await fetchRecordsForReports(buildFilters(), {
         districtScope: effectiveDistrictScope,
@@ -77,11 +80,13 @@ export function ReportsPage({ districtScope }: ReportsPageProps) {
       setSelectedIds(new Set());
     } catch (err) {
       console.error('Failed to load records:', err);
-      setAlert({ type: 'danger', msg: 'Failed to load records for reports.' });
+      const message = err instanceof Error ? err.message : 'Failed to load records for reports.';
+      setAlert({ type: 'danger', msg: message });
+      setRecords([]);
     } finally {
       setLoading(false);
     }
-  }, [buildFilters, effectiveDistrictScope]);
+  }, [authLoading, buildFilters, effectiveDistrictScope]);
 
   useEffect(() => {
     loadRecords();
@@ -198,6 +203,16 @@ export function ReportsPage({ districtScope }: ReportsPageProps) {
     setDateTo('');
     setSupplierFilter('');
   };
+
+  useEffect(() => {
+    if (effectiveDistrictScope) {
+      setDistrictFilter(effectiveDistrictScope);
+    }
+  }, [effectiveDistrictScope]);
+
+  if (authLoading) {
+    return <Loader message="Loading reports…" fullPage={false} />;
+  }
 
   if (!canGenerate) {
     return (
