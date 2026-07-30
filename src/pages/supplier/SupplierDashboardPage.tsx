@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { Loader } from '../../components/common/Loader';
 import { fetchSupplierRecords } from '../../services/data.service';
@@ -47,9 +48,9 @@ export function SupplierDashboardPage() {
           </h1>
           <p className="text-muted mb-0">Manage your work order submissions and remarks</p>
         </div>
-        <a href="/supplier/entry" className="btn btn-primary" id="new-submission-btn">
+        <Link to="/supplier/entry" className="btn btn-primary" id="new-submission-btn">
           <i className="bi bi-plus-lg me-2"></i>New Submission
-        </a>
+        </Link>
       </div>
 
       {/* Summary Cards */}
@@ -106,9 +107,9 @@ export function SupplierDashboardPage() {
             <div className="text-center py-5">
               <i className="bi bi-inbox text-muted" style={{ fontSize: '3rem' }}></i>
               <p className="text-muted mt-2 mb-3">You have not submitted any entries yet.</p>
-              <a href="/supplier/entry" className="btn btn-primary btn-sm">
+              <Link to="/supplier/entry" className="btn btn-primary btn-sm">
                 Create First Entry
-              </a>
+              </Link>
             </div>
           ) : (
             <div className="table-responsive">
@@ -142,13 +143,13 @@ export function SupplierDashboardPage() {
                         </span>
                       </td>
                       <td className="text-end pe-3">
-                        <a
-                          href={`/supplier/entry?id=${record.id}`}
+                        <Link
+                          to={`/supplier/entry?id=${record.id}`}
                           className="btn btn-sm btn-outline-primary"
                         >
                           <i className="bi bi-chat-left-text me-1"></i>
                           View / Add Remarks
-                        </a>
+                        </Link>
                       </td>
                     </tr>
                   ))}

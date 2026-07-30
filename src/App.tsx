@@ -17,6 +17,8 @@ import { SupplierEntryPage } from './pages/supplier/SupplierEntryPage';
 import { UnauthorizedPage } from './pages/UnauthorizedPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 
+import { ComingSoonPage } from './pages/ComingSoonPage';
+
 function App() {
   return (
     <ErrorBoundary>
@@ -41,7 +43,8 @@ function App() {
               <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
               <Route path="/admin/users" element={<AdminUsersPage />} />
               <Route path="/admin/records" element={<AdminRecordsPage />} />
-              {/* Future: /admin/geography, /admin/reports */}
+              <Route path="/admin/geography" element={<ComingSoonPage title="Geography Management" />} />
+              <Route path="/admin/reports" element={<ComingSoonPage title="System Reports" />} />
             </Route>
 
             {/* ── Subadmin routes ────────────────────────────────── */}
@@ -54,6 +57,7 @@ function App() {
             >
               <Route path="/subadmin/dashboard" element={<SubadminDashboardPage />} />
               <Route path="/subadmin/records" element={<SubadminRecordsPage />} />
+              <Route path="/subadmin/reports" element={<ComingSoonPage title="Subadmin Reports" />} />
             </Route>
 
             {/* ── Supplier routes ────────────────────────────────── */}
@@ -66,7 +70,7 @@ function App() {
             >
               <Route path="/supplier/dashboard" element={<SupplierDashboardPage />} />
               <Route path="/supplier/entry" element={<SupplierEntryPage />} />
-              {/* Future: /supplier/record */}
+              <Route path="/supplier/record" element={<ComingSoonPage title="Supplier Record History" />} />
             </Route>
 
             {/* 404 */}

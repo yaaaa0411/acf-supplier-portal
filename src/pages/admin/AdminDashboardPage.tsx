@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { getGreeting } from '../../utils/helpers';
 import { fetchDashboardStats, type DashboardStats } from '../../services/admin.service';
@@ -118,14 +119,14 @@ export function AdminDashboardPage() {
         <div className="card-body">
           <div className="row g-2">
             <div className="col-auto">
-              <a href="/admin/users" className="btn btn-outline-primary">
+              <Link to="/admin/users" className="btn btn-outline-primary">
                 <i className="bi bi-person-plus me-1"></i> Add User
-              </a>
+              </Link>
             </div>
             <div className="col-auto">
-              <a href="/admin/records" className="btn btn-outline-success">
+              <Link to="/admin/records" className="btn btn-outline-success">
                 <i className="bi bi-journal-text me-1"></i> View Supplier Records
-              </a>
+              </Link>
             </div>
           </div>
         </div>

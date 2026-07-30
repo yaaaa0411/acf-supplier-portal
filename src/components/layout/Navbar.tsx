@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { getInitials } from '../../utils/helpers';
 
@@ -39,11 +40,11 @@ export function Navbar({ onToggleSidebar }: NavbarProps) {
         </button>
 
         {/* Brand */}
-        <a className="navbar-brand d-flex align-items-center fw-bold" href="/">
+        <Link className="navbar-brand d-flex align-items-center fw-bold" to="/">
           <i className="bi bi-building me-2" style={{ fontSize: '1.4rem' }}></i>
           <span className="d-none d-sm-inline">Ambuja Cement Foundation</span>
           <span className="d-sm-none">ACF</span>
-        </a>
+        </Link>
 
         {/* Right side */}
         <ul className="navbar-nav ms-auto align-items-center">
