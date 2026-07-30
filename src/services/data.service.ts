@@ -1,50 +1,112 @@
 import { supabase } from '../config/supabase';
 import type { District, Block, Village, SupplierRecord, Remark } from '../types';
+import { getFallbackDistricts, getFallbackBlocks, getFallbackVillages } from '../data/masterLocations';
 
 // ─── Geography Services ─────────────────────────────────────────────────────
 
 export async function fetchDistricts(): Promise<District[]> {
-  const { data, error } = await supabase
-    .from('districts')
-    .select('*')
-    .eq('is_active', true)
-    .order('name');
+  try {
+    const { data, error } = await supabase
+      .from('districts')
+      .select('*')
+      .eq('is_active', true)
+      .order('name');
 
-  if (error) {
-    console.error('Fetch districts error:', error.message);
-    throw error;
+    if (error) {
+      console.warn('Fetch districts from DB failed, using master fallback:', error.message);
+      return getFallbackDistricts();
+    }
+    
+    if (!data || data.length === 0) {
+      return getFallbackDistricts();
+    }
+    
+    return data as District[];
+  } catch (err) {
+    console.warn('Fetch districts error, using master fallback:', err);
+    return getFallbackDistricts();
   }
-  return (data ?? []) as District[];
 }
 
 export async function fetchBlocksByDistrict(districtId: string): Promise<Block[]> {
-  const { data, error } = await supabase
-    .from('blocks')
-    .select('*')
-    .eq('district_id', districtId)
-    .eq('is_active', true)
-    .order('name');
+  try {
+    // Try to get district details if districtId is UUID vs fallback ID
+    let finalDistrictName = districtId;
+    if (districtId.startsWith('dist-')) {
+      // Fallback path
+      return getFallbackBlocks(districtId);
+    }
 
-  if (error) {
-    console.error('Fetch blocks error:', error.message);
-    throw error;
+    const { data: distData } = await supabase
+      .from('districts')
+      .select('name')
+      .eq('id', districtId)
+      .single();
+    if (distData) {
+      finalDistrictName = distData.name;
+    }
+
+    const { data, error } = await supabase
+      .from('blocks')
+      .select('*')
+      .eq('district_id', districtId)
+      .eq('is_active', true)
+      .order('name');
+
+    if (error) {
+      console.warn('Fetch blocks from DB failed, using master fallback:', error.message);
+      return getFallbackBlocks(finalDistrictName);
+    }
+
+    if (!data || data.length === 0) {
+      return getFallbackBlocks(finalDistrictName);
+    }
+
+    return data as Block[];
+  } catch (err) {
+    console.warn('Fetch blocks error, using master fallback:', err);
+    return getFallbackBlocks(districtId);
   }
-  return (data ?? []) as Block[];
 }
 
 export async function fetchVillagesByBlock(blockId: string): Promise<Village[]> {
-  const { data, error } = await supabase
-    .from('villages')
-    .select('*')
-    .eq('block_id', blockId)
-    .eq('is_active', true)
-    .order('name');
+  try {
+    let finalBlockName = blockId;
+    if (blockId.startsWith('blk-')) {
+      // Fallback path
+      return getFallbackVillages(blockId);
+    }
 
-  if (error) {
-    console.error('Fetch villages error:', error.message);
-    throw error;
+    const { data: blkData } = await supabase
+      .from('blocks')
+      .select('name')
+      .eq('id', blockId)
+      .single();
+    if (blkData) {
+      finalBlockName = blkData.name;
+    }
+
+    const { data, error } = await supabase
+      .from('villages')
+      .select('*')
+      .eq('block_id', blockId)
+      .eq('is_active', true)
+      .order('name');
+
+    if (error) {
+      console.warn('Fetch villages from DB failed, using master fallback:', error.message);
+      return getFallbackVillages(finalBlockName);
+    }
+
+    if (!data || data.length === 0) {
+      return getFallbackVillages(finalBlockName);
+    }
+
+    return data as Village[];
+  } catch (err) {
+    console.warn('Fetch villages error, using master fallback:', err);
+    return getFallbackVillages(blockId);
   }
-  return (data ?? []) as Village[];
 }
 
 // ─── Supplier Record Services ────────────────────────────────────────────────

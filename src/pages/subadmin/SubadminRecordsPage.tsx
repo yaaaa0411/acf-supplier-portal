@@ -298,16 +298,16 @@ export function SubadminRecordsPage() {
               </div>
             </div>
 
-            {/* Block filter */}
+            {/* Taluka filter */}
             <div className="col-6 col-md-2">
-              <label className="form-label small fw-medium mb-1">Block</label>
+              <label className="form-label small fw-medium mb-1">Taluka</label>
               <select
                 className="form-select form-select-sm"
                 value={blockFilter}
                 onChange={(e) => handleBlockChange(e.target.value)}
                 id="filter-block-records"
               >
-                <option value="">All Blocks</option>
+                <option value="">All Talukas</option>
                 {blocks.map((b) => (
                   <option key={b.id} value={b.id}>{b.name}</option>
                 ))}
@@ -394,7 +394,7 @@ export function SubadminRecordsPage() {
                     <th className="ps-3">#</th>
                     <th>Work Order</th>
                     <th>MIS Supplier Name</th>
-                    <th>Block</th>
+                    <th>Taluka</th>
                     <th>Village</th>
                     <th>Year</th>
                     <th>Date</th>

@@ -404,10 +404,10 @@ export function SupplierEntryPage() {
               </select>
             </div>
 
-            {/* Block */}
+            {/* Taluka */}
             <div className="mb-3">
               <label htmlFor="block-select" className="form-label fw-medium">
-                Block <span className="text-danger">*</span>
+                Taluka <span className="text-danger">*</span>
               </label>
               <select
                 className="form-select"
@@ -416,7 +416,7 @@ export function SupplierEntryPage() {
                 onChange={(e) => handleBlockChange(e.target.value)}
                 disabled={isReadOnly || !districtId}
               >
-                <option value="">— Select Block —</option>
+                <option value="">— Select Taluka —</option>
                 {blocks.map((b) => (
                   <option key={b.id} value={b.id}>{b.name}</option>
                 ))}
@@ -444,7 +444,7 @@ export function SupplierEntryPage() {
                 ))}
               </select>
               {!blockId && (
-                <div className="form-text">Select a block first.</div>
+                <div className="form-text">Select a taluka first.</div>
               )}
             </div>
 
