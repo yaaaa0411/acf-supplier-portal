@@ -21,7 +21,7 @@ import {
 import { RecordDetailsPanel } from '../../components/supplier/RecordDetailsPanel';
 import type { SupplierRecord, District } from '../../types';
 import { MIS_TYPE_OPTIONS } from '../../types';
-import { parseWorkOrderNumber, getFinancialYearLabel, getFinancialYearCode, getFinancialYearOptions } from '../../utils/workOrder';
+import { parseWorkOrderNumber, getFinancialYearLabel, getFinancialYearOptions } from '../../utils/workOrder';
 
 const PAGE_SIZE = 10;
 const STATUS_OPTIONS = [

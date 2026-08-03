@@ -19,7 +19,7 @@ import {
 } from '../../services/data.service';
 import type { District, Block, Village, SupplierRecord, Remark, WorkOrderPrefix } from '../../types';
 import { WORK_ORDER_PREFIXES, MIS_TYPE_OPTIONS } from '../../types';
-import { getFinancialYearCode, getFinancialYearOptions, extractReceiptNumber, parseWorkOrderNumber } from '../../utils/workOrder';
+import { getFinancialYearCode, getFinancialYearOptions, parseWorkOrderNumber } from '../../utils/workOrder';
 import { RecordDetailsPanel } from '../../components/supplier/RecordDetailsPanel';
 
 /**
