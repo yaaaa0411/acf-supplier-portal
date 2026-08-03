@@ -21,7 +21,7 @@ import {
 import { RecordDetailsPanel } from '../../components/supplier/RecordDetailsPanel';
 import type { SupplierRecord, District } from '../../types';
 import { MIS_TYPE_OPTIONS } from '../../types';
-import { parseWorkOrderNumber, getFinancialYearLabel, getFinancialYearCode } from '../../utils/workOrder';
+import { parseWorkOrderNumber, getFinancialYearLabel, getFinancialYearCode, getFinancialYearOptions } from '../../utils/workOrder';
 
 const PAGE_SIZE = 10;
 const STATUS_OPTIONS = [
@@ -37,20 +37,9 @@ type RecordWithDistrict = SupplierRecord & {
   villages?: { name: string } | null;
 };
 
-const WORK_ORDER_FORMAT = /^\d{4}-(GS|AML|CTU|JND)-\d+$/;
+const WORK_ORDER_FORMAT = /^\d{4}-(GS|AMR|CTU|JND|AMD)-\d+$/;
 
-function getFinancialYearOptions(): { value: string; label: string }[] {
-  const options: { value: string; label: string }[] = [];
-  const now = new Date();
-  for (let offset = -3; offset <= 2; offset++) {
-    const d = new Date(now.getFullYear() + offset, 3, 1);
-    const code = getFinancialYearCode(d);
-    if (!options.some((o) => o.value === code)) {
-      options.push({ value: code, label: getFinancialYearLabel(code) });
-    }
-  }
-  return options.sort((a, b) => b.value.localeCompare(a.value));
-}
+
 
 /**
  * Admin Records Page.

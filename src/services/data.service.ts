@@ -166,12 +166,15 @@ export async function createSupplierRecord(
 }
 
 /**
- * Generate the next work order number for a given prefix.
+ * Generate the next work order number for a given prefix and financial year.
  * Format: {FY}-{PREFIX}-{SEQ4} e.g. 2526-GS-2704
+ * @param prefix  Work-order prefix (GS, AMR, CTU, JND, AMD)
+ * @param financialYear  4-digit FY code e.g. "2526". Falls back to current FY if omitted.
  */
-export async function generateWorkOrderNumber(prefix: string): Promise<string> {
+export async function generateWorkOrderNumber(prefix: string, financialYear?: string): Promise<string> {
   const { data, error } = await supabase.rpc('generate_work_order_number', {
     p_prefix: prefix,
+    p_fy: financialYear ?? null,
   });
 
   if (error) {

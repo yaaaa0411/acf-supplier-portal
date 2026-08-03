@@ -13,7 +13,7 @@ import {
 } from '../../services/data.service';
 import { RecordDetailsPanel } from '../../components/supplier/RecordDetailsPanel';
 import type { SupplierRecord, Block, Village, Remark } from '../../types';
-import { getFinancialYearLabel, getFinancialYearCode } from '../../utils/workOrder';
+import { getFinancialYearLabel, getFinancialYearOptions } from '../../utils/workOrder';
 import { formatMoney } from '../../utils/costCalculations';
 
 const PAGE_SIZE = 10;
@@ -49,18 +49,7 @@ export function SubadminRecordsPage() {
   // Dropdown options
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [villages, setVillages] = useState<Village[]>([]);
-  const yearOptions = (() => {
-    const options: { value: string; label: string }[] = [];
-    const now = new Date();
-    for (let offset = -3; offset <= 2; offset++) {
-      const d = new Date(now.getFullYear() + offset, 3, 1);
-      const code = getFinancialYearCode(d);
-      if (!options.some((o) => o.value === code)) {
-        options.push({ value: code, label: getFinancialYearLabel(code) });
-      }
-    }
-    return options.sort((a, b) => b.value.localeCompare(a.value));
-  })();
+  const yearOptions = getFinancialYearOptions();
 
   // Filters state
   const [search, setSearch] = useState('');

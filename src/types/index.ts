@@ -65,7 +65,7 @@ export interface Village {
   updated_at: string;
 }
 
-export type WorkOrderPrefix = 'GS' | 'AML' | 'CTU' | 'JND';
+export type WorkOrderPrefix = 'GS' | 'AMR' | 'CTU' | 'JND' | 'AMD';
 
 export type RecordStatus = 'submitted' | 'approved' | 'rejected';
 
@@ -164,9 +164,10 @@ export const ROLE_DASHBOARD_ROUTES: Record<UserRole, string> = {
 
 export const WORK_ORDER_PREFIXES: { value: WorkOrderPrefix; label: string }[] = [
   { value: 'GS', label: 'GS' },
-  { value: 'AML', label: 'AML' },
+  { value: 'AMR', label: 'AMR' },
   { value: 'CTU', label: 'CTU' },
   { value: 'JND', label: 'JND' },
+  { value: 'AMD', label: 'AMD' },
 ];
 
 export const MIS_TYPE_OPTIONS: { value: string; label: string }[] = [

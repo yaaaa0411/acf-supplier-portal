@@ -14,14 +14,12 @@ import {
   fetchVillagesByBlock,
   fetchSupplierRecordById,
   createSupplierRecord,
-  generateWorkOrderNumber,
   fetchRemarksByRecord,
   createRemark,
 } from '../../services/data.service';
 import type { District, Block, Village, SupplierRecord, Remark, WorkOrderPrefix } from '../../types';
 import { WORK_ORDER_PREFIXES, MIS_TYPE_OPTIONS } from '../../types';
-import { getFinancialYearCode } from '../../utils/workOrder';
-import { extractReceiptNumber } from '../../utils/workOrder';
+import { getFinancialYearCode, getFinancialYearOptions, extractReceiptNumber, parseWorkOrderNumber } from '../../utils/workOrder';
 import { RecordDetailsPanel } from '../../components/supplier/RecordDetailsPanel';
 
 /**
@@ -42,7 +40,8 @@ export function SupplierEntryPage() {
   const [pageLoading, setPageLoading] = useState(true);
 
   const [workOrderPrefix, setWorkOrderPrefix] = useState<WorkOrderPrefix>('GS');
-  const [generatedWorkOrder, setGeneratedWorkOrder] = useState('');
+  const [financialYear, setFinancialYear] = useState(getFinancialYearCode());
+  const [workOrderSeq, setWorkOrderSeq] = useState('');
   const [districtId, setDistrictId] = useState('');
   const [blockId, setBlockId] = useState('');
   const [villageId, setVillageId] = useState('');
@@ -73,7 +72,7 @@ export function SupplierEntryPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const financialYear = getFinancialYearCode();
+  const financialYearOptions = getFinancialYearOptions();
 
   const loadInitialData = useCallback(async () => {
     if (!profile) return;
@@ -93,10 +92,18 @@ export function SupplierEntryPage() {
 
           setExistingRecord(record);
           setHasSubmitted(true);
-          setGeneratedWorkOrder(record.work_order_number);
-          setWorkOrderPrefix(
-            (record.work_order_number.match(/-(GS|AML|CTU|JND)-/)?.[1] as WorkOrderPrefix) ?? 'GS'
-          );
+          const parsed = parseWorkOrderNumber(record.work_order_number);
+          if (parsed) {
+            setFinancialYear(parsed.financialYear);
+            setWorkOrderPrefix(parsed.prefix);
+            setWorkOrderSeq(parsed.sequence);
+          } else {
+            setWorkOrderPrefix(
+              (record.work_order_number.match(/-(GS|AMR|CTU|JND|AMD)-/)?.[1] as WorkOrderPrefix) ?? 'GS'
+            );
+            setFinancialYear(record.year || getFinancialYearCode());
+            setWorkOrderSeq('');
+          }
           setDistrictId(record.district_id);
           setMisSupplierName(record.mis_supplier_name);
           setDateOfApplication(record.date_of_application);
@@ -133,7 +140,8 @@ export function SupplierEntryPage() {
         setExistingRecord(null);
         setHasSubmitted(false);
         setWorkOrderPrefix('GS');
-        setGeneratedWorkOrder('');
+        setFinancialYear(getFinancialYearCode());
+        setWorkOrderSeq('');
         setDistrictId('');
         setBlockId('');
         setVillageId('');
@@ -202,6 +210,8 @@ export function SupplierEntryPage() {
     e.preventDefault();
     if (!profile || hasSubmitted) return;
 
+    if (!workOrderSeq.trim()) { setError('Work Order Number is required.'); return; }
+    if (!/^\d+$/.test(workOrderSeq.trim())) { setError('Work Order Number must contain only digits.'); return; }
     if (!districtId) { setError('Please select a District.'); return; }
     if (!blockId) { setError('Please select a Block.'); return; }
     if (!villageId) { setError('Please select a Village.'); return; }
@@ -221,13 +231,13 @@ export function SupplierEntryPage() {
       return;
     }
 
+    const workOrderNumber = `${financialYear}-${workOrderPrefix}-${workOrderSeq.trim()}`;
+    const receiptNumber = workOrderSeq.trim().padStart(4, '0');
+
     setError(null);
     setSubmitting(true);
 
     try {
-      const workOrderNumber = await generateWorkOrderNumber(workOrderPrefix);
-      const receiptNumber = extractReceiptNumber(workOrderNumber);
-
       const record = await createSupplierRecord({
         supplier_id: profile.id,
         work_order_number: workOrderNumber,
@@ -257,7 +267,6 @@ export function SupplierEntryPage() {
       }
 
       setExistingRecord(record);
-      setGeneratedWorkOrder(workOrderNumber);
       setHasSubmitted(true);
       setSuccess(`Your entry has been submitted successfully! Work Order: ${workOrderNumber}`);
 
@@ -266,8 +275,8 @@ export function SupplierEntryPage() {
       }, 2000);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Submission failed. Please try again.';
-      if (message.includes('work_order_number') || message.toLowerCase().includes('duplicate')) {
-        setError('Work order generation failed due to a duplicate. Please try again.');
+      if (message.includes('work_order_number') || message.toLowerCase().includes('duplicate') || message.toLowerCase().includes('unique')) {
+        setError('This Work Order Number already exists. Please use a different number.');
       } else {
         setError(message);
       }
@@ -363,29 +372,59 @@ export function SupplierEntryPage() {
             {/* Work Order Number */}
             <div className="mb-3">
               <label className="form-label fw-medium">
-                Work Order Prefix <span className="text-danger">*</span>
+                Work Order Number <span className="text-danger">*</span>
               </label>
               {isReadOnly ? (
                 <input
                   type="text"
                   className="form-control bg-light"
-                  value={generatedWorkOrder || existingRecord?.work_order_number || ''}
+                  value={existingRecord?.work_order_number || ''}
                   readOnly
                 />
               ) : (
                 <>
-                  <select
-                    className="form-select"
-                    value={workOrderPrefix}
-                    onChange={(e) => setWorkOrderPrefix(e.target.value as WorkOrderPrefix)}
-                    id="work-order-prefix"
-                  >
-                    {WORK_ORDER_PREFIXES.map((p) => (
-                      <option key={p.value} value={p.value}>{p.label}</option>
-                    ))}
-                  </select>
+                  <div className="row g-2">
+                    <div className="col-md-4">
+                      <label className="form-label small text-muted mb-1">Financial Year</label>
+                      <select
+                        className="form-select"
+                        value={financialYear}
+                        onChange={(e) => setFinancialYear(e.target.value)}
+                        id="financial-year-select"
+                      >
+                        {financialYearOptions.map((fy) => (
+                          <option key={fy.value} value={fy.value}>{fy.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="col-md-4">
+                      <label className="form-label small text-muted mb-1">Prefix</label>
+                      <select
+                        className="form-select"
+                        value={workOrderPrefix}
+                        onChange={(e) => setWorkOrderPrefix(e.target.value as WorkOrderPrefix)}
+                        id="work-order-prefix"
+                      >
+                        {WORK_ORDER_PREFIXES.map((p) => (
+                          <option key={p.value} value={p.value}>{p.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="col-md-4">
+                      <label className="form-label small text-muted mb-1">Number</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        id="work-order-seq"
+                        placeholder="e.g. 2704"
+                        value={workOrderSeq}
+                        onChange={(e) => setWorkOrderSeq(e.target.value.replace(/\D/g, ''))}
+                        inputMode="numeric"
+                      />
+                    </div>
+                  </div>
                   <div className="form-text">
-                    Work Order Number will be auto-generated on submit (e.g. {financialYear}-{workOrderPrefix}-0001)
+                    Work Order: <strong>{financialYear}-{workOrderPrefix}-{workOrderSeq || '____'}</strong> — must be unique
                   </div>
                 </>
               )}
