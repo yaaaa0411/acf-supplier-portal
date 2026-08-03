@@ -41,15 +41,12 @@ export async function fetchGgrcReceiptPdf(workOrderNumber: string): Promise<Buff
       );
     }
 
-    // Locate the "Reg No" input field
-    // GGRC Portal is an ASP.NET WebForms page, usually with ids containing txtRegNo, txt_RegNo, etc.
+    // Locate the "Reg No" input field under Generate Payslip
     const regNoInputSelectors = [
-      'input[id*="txtRegNo"]',
-      'input[id*="RegNo"]',
-      'input[name*="RegNo"]',
-      'input[placeholder*="Reg No"]',
-      'input[placeholder*="Registration"]',
-      'input[type="text"]'
+      'input#txtRegPay',
+      'input[id*="txtRegPay"]',
+      'input[name*="RegPay"]',
+      'input[id*="RegPay"]',
     ];
 
     let regNoInput = null;
@@ -57,118 +54,78 @@ export async function fetchGgrcReceiptPdf(workOrderNumber: string): Promise<Buff
       const element = page.locator(selector).first();
       if (await element.isVisible().catch(() => false)) {
         regNoInput = element;
-        logger.info(`Found Registration Number field using selector: ${selector}`);
+        logger.info(`Found Generate Payslip Registration Number field using selector: ${selector}`);
         break;
       }
     }
 
     if (!regNoInput) {
-      throw new GgrcServiceError('Could not find Registration Number field on GGRC portal.', 'SELECTOR_ERROR', 500);
+      throw new GgrcServiceError('Could not find Generate Payslip Registration Number field on GGRC portal.', 'SELECTOR_ERROR', 500);
     }
 
     // Input the Work Order Number
     await regNoInput.fill(workOrderNumber);
     logger.info(`Filled registration input with: ${workOrderNumber}`);
 
-    // Locate the Search button
-    const searchButtonSelectors = [
-      'input[type="submit"][value*="Search"]',
-      'button[id*="btnSearch"]',
-      'input[id*="btnSearch"]',
-      'input[value*="Search"]',
-      'button:has-text("Search")'
-    ];
-
-    let searchButton = null;
-    for (const selector of searchButtonSelectors) {
-      const element = page.locator(selector).first();
-      if (await element.isVisible().catch(() => false)) {
-        searchButton = element;
-        logger.info(`Found Search button using selector: ${selector}`);
-        break;
-      }
-    }
-
-    if (!searchButton) {
-      throw new GgrcServiceError('Could not find Search button on GGRC portal.', 'SELECTOR_ERROR', 500);
-    }
-
-    // Click Search
-    logger.info('Clicking search button...');
-    await searchButton.click();
-
-    // Check for "Receipt Not Found" or alert messages
-    // Sometimes alerts appear, or a panel with error message shows up.
-    // Let's set up a listener for browser dialogs first.
-    let alertMsg: string | null = null;
-    page.once('dialog', async (dialog) => {
-      alertMsg = dialog.message();
-      logger.warn(`Browser dialog appeared: ${alertMsg}`);
-      await dialog.dismiss();
-    });
-
-    // Wait for either the download button to appear or a message stating not found
+    // Locate the "Download Payment Receipt" button under Generate Payslip
     const downloadButtonSelectors = [
-      'a:has-text("Download Payment Receipt")',
+      'input#btnPaySlip',
+      'input[id*="btnPaySlip"]',
+      'input[name*="btnPaySlip"]',
       'input[value*="Download Payment Receipt"]',
       'button:has-text("Download Payment Receipt")',
       '[id*="DownloadPaymentReceipt"]',
       '[id*="btnDownload"]',
-      '[id*="lnkDownload"]',
-      'a:has-text("Download")',
-      'input[value*="Download"]'
     ];
 
     let downloadButton = null;
-    const startTime = Date.now();
-    const timeout = 15000; // Wait up to 15 seconds for search results
-
-    while (Date.now() - startTime < timeout) {
-      if (alertMsg) {
-        throw new GgrcServiceError(`GGRC alert: ${alertMsg}`, 'RECEIPT_NOT_FOUND', 404);
+    for (const selector of downloadButtonSelectors) {
+      const element = page.locator(selector).first();
+      if (await element.isVisible().catch(() => false)) {
+        downloadButton = element;
+        logger.info(`Found Download Payment Receipt button using selector: ${selector}`);
+        break;
       }
-
-      // Check if any error/not found message is visible on the page
-      const pageText = await page.innerText('body').catch(() => '');
-      if (
-        pageText.includes('Record Not Found') || 
-        pageText.includes('no record') || 
-        pageText.includes('Invalid Registration') ||
-        pageText.includes('Not Found')
-      ) {
-        throw new GgrcServiceError(`Work Order Number ${workOrderNumber} not found in GGRC database.`, 'RECEIPT_NOT_FOUND', 404);
-      }
-
-      // Check if download button is visible
-      for (const selector of downloadButtonSelectors) {
-        const element = page.locator(selector).first();
-        if (await element.isVisible().catch(() => false)) {
-          downloadButton = element;
-          logger.info(`Found Download Payment Receipt button using selector: ${selector}`);
-          break;
-        }
-      }
-
-      if (downloadButton) break;
-      await page.waitForTimeout(500);
     }
 
     if (!downloadButton) {
-      throw new GgrcServiceError(
-        'Receipt download button did not appear. It may not be ready or the work order number is invalid.',
-        'RECEIPT_NOT_FOUND',
-        404
-      );
+      throw new GgrcServiceError('Could not find Download Payment Receipt button on GGRC portal.', 'SELECTOR_ERROR', 500);
     }
+
+    // Set up a listener for browser dialogs first.
+    let alertMsg: string | null = null;
+    let rejectDownload: ((reason: any) => void) | null = null;
+
+    page.on('dialog', async (dialog) => {
+      alertMsg = dialog.message();
+      logger.warn(`Browser dialog appeared: ${alertMsg}`);
+      await dialog.dismiss();
+      if (rejectDownload) {
+        rejectDownload(new GgrcServiceError(`GGRC alert: ${alertMsg}`, 'RECEIPT_NOT_FOUND', 404));
+      }
+    });
 
     // Intercept and download PDF
     logger.info('Clicking Download Payment Receipt button to retrieve PDF...');
-    const [download] = await Promise.all([
-      page.waitForEvent('download', { timeout: 30000 }).catch((e) => {
-        throw new GgrcServiceError('Timeout waiting for receipt download to initiate.', 'DOWNLOAD_TIMEOUT', 408);
-      }),
-      downloadButton.click()
-    ]);
+    
+    const downloadPromise = new Promise<any>((resolve, reject) => {
+      rejectDownload = reject;
+      
+      // Also check for standard download event
+      page.waitForEvent('download', { timeout: 15000 })
+        .then(resolve)
+        .catch((e) => {
+          if (alertMsg) {
+            reject(new GgrcServiceError(`GGRC alert: ${alertMsg}`, 'RECEIPT_NOT_FOUND', 404));
+          } else {
+            reject(new GgrcServiceError('Timeout waiting for receipt download to initiate.', 'DOWNLOAD_TIMEOUT', 408));
+          }
+        });
+    });
+
+    await downloadButton.click();
+
+    const download = await downloadPromise;
 
     const tempPath = await download.path();
     if (!tempPath) {
