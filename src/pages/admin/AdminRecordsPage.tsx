@@ -22,6 +22,7 @@ import { RecordDetailsPanel } from '../../components/supplier/RecordDetailsPanel
 import type { SupplierRecord, District } from '../../types';
 import { MIS_TYPE_OPTIONS } from '../../types';
 import { parseWorkOrderNumber, getFinancialYearLabel, getFinancialYearOptions } from '../../utils/workOrder';
+import { downloadGgrcReceipt } from '../../services/ggrc.service';
 
 const PAGE_SIZE = 10;
 const STATUS_OPTIONS = [
@@ -100,6 +101,10 @@ export function AdminRecordsPage() {
   // Alert
   const [alert, setAlert] = useState<{ type: string; msg: string } | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  
+  // GGRC Download state
+  const [downloadingRecordId, setDownloadingRecordId] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<string>('');
 
   // ── Load data ──────────────────────────────────────────────────────────────
 
@@ -329,6 +334,64 @@ export function AdminRecordsPage() {
     }
   };
 
+  const handleDownloadGgrc = async (record: RecordWithDistrict) => {
+    if (!record.work_order_number) {
+      setAlert({ type: 'danger', msg: 'This record has no Work Order Number.' });
+      return;
+    }
+
+    setDownloadingRecordId(record.id);
+    setDownloadProgress('Searching...');
+    setAlert(null);
+
+    // Simulate progress phases
+    const progressIntervals = [
+      { text: 'Generating Receipt...', delay: 3500 },
+      { text: 'Downloading...', delay: 8500 }
+    ];
+
+    const timers = progressIntervals.map(step => 
+      setTimeout(() => setDownloadProgress(step.text), step.delay)
+    );
+
+    try {
+      const pdfBlob = await downloadGgrcReceipt(record.work_order_number);
+      
+      timers.forEach(clearTimeout);
+      setDownloadProgress('Completed');
+
+      // Create blob URL and download or open
+      const pdfUrl = URL.createObjectURL(pdfBlob);
+      
+      // Auto-click invisible link to download or open
+      const link = document.createElement('a');
+      link.href = pdfUrl;
+      link.target = '_blank';
+      link.download = `GGRC_Receipt_${record.work_order_number.replace(/-/g, '_')}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      // Clean up state
+      setTimeout(() => {
+        setDownloadingRecordId(null);
+        setDownloadProgress('');
+      }, 2000);
+    } catch (err: any) {
+      timers.forEach(clearTimeout);
+      setDownloadProgress('Failed');
+      setAlert({ 
+        type: 'danger', 
+        msg: `Failed to download receipt: ${err.message || 'Unknown error'}` 
+      });
+      
+      setTimeout(() => {
+        setDownloadingRecordId(null);
+        setDownloadProgress('');
+      }, 3000);
+    }
+  };
+
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   const getStatusBadge = (status: string) => {
@@ -535,6 +598,33 @@ export function AdminRecordsPage() {
                               </button>
                             </>
                           )}
+                          <button
+                            className={`btn btn-sm ${
+                              downloadingRecordId === record.id
+                                ? downloadProgress === 'Completed'
+                                  ? 'btn-success'
+                                  : downloadProgress === 'Failed'
+                                    ? 'btn-danger'
+                                    : 'btn-info text-white'
+                                : 'btn-outline-secondary'
+                            }`}
+                            title="Download GGRC Receipt"
+                            onClick={() => handleDownloadGgrc(record)}
+                            disabled={downloadingRecordId !== null}
+                            type="button"
+                          >
+                            {downloadingRecordId === record.id ? (
+                              <>
+                                <span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                                {downloadProgress}
+                              </>
+                            ) : (
+                              <>
+                                <i className="bi bi-file-earmark-pdf me-1"></i>
+                                Download GGRC Receipt
+                              </>
+                            )}
+                          </button>
                           <button
                             className="btn btn-sm btn-outline-secondary"
                             title="View Details"
